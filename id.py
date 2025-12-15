@@ -6,7 +6,10 @@ Funksiya: Akkaunt yoki user haqida keng qamrovli ma'lumot berish (.info)
 ================================================================================
 """
 import time
+import asyncio
+from telethon import types  # UserStatus turlarini olish uchun muhim
 from telethon.tl.functions.users import GetFullUserRequest
+from telethon.utils import get_display_name
 
 class AccountInfoModule:
     """
@@ -31,10 +34,10 @@ class AccountInfoModule:
             try:
                 # Username yoki ID orqali qidirish
                 user_entity = await self.client.get_entity(args[0])
-            except:
+            except Exception:
                 return await message.edit("❌ Akkaunt (username/ID) topilmadi.")
         else:
-            # Akkauntni o'zimiznikini olish
+            # Argument va reply bo'lmasa, o'zimizning ma'lumotimizni olamiz
             user_entity = await message.get_sender()
             
         if not user_entity: 
@@ -44,41 +47,67 @@ class AccountInfoModule:
         
         try:
             # 2. To'liq ma'lumot olish (Bio, Status, va h.k.)
+            # GetFullUserRequest ko'p ma'lumot beradi
             full_info = await self.client(GetFullUserRequest(user_entity.id))
             user = full_info.users[0]
             full_user = full_info.full_user
             
             # 3. Ma'lumotlarni tahlil qilish
             
-            # User turi
+            # User turi (Botmi, User, Premium)
             user_type = "Bot 🤖" if user.bot else "User 🧑‍💻"
-            if user.premium: user_type += " (Premium 🌟)"
+            if user.premium: 
+                user_type += " (Premium 🌟)"
+            if user.scam:
+                user_type += " (Scam ⚠️)"
+            if user.fake:
+                user_type += " (Fake 🚫)"
             
             # Oxirgi ko'rgan vaqti (Status)
-            if isinstance(full_user.status, types.UserStatusOnline):
+            status = "Noma'lum"
+            if isinstance(user.status, types.UserStatusOnline):
                 status = "🟢 Online"
-            elif isinstance(full_user.status, types.UserStatusOffline):
-                last_seen_ts = full_user.status.was_online.timestamp()
+            elif isinstance(user.status, types.UserStatusOffline):
+                last_seen_ts = user.status.was_online.timestamp()
                 now_ts = time.time()
+                # Millisekund hisobi (self.utils funksiyasi uchun)
                 diff_ms = (now_ts - last_seen_ts) * 1000
-                last_seen = self.utils.time_formatter(diff_ms)
-                status = f"🔴 Offline (Oxirgi: {last_seen} avval)"
+                last_seen_str = self.utils.time_formatter(diff_ms)
+                status = f"🔴 Offline (Oxirgi: {last_seen_str} avval)"
+            elif isinstance(user.status, types.UserStatusRecently):
+                status = "🟡 Yaqinda kirgan"
+            elif isinstance(user.status, types.UserStatusLastWeek):
+                status = "🟡 O'tgan hafta kirgan"
+            elif isinstance(user.status, types.UserStatusLastMonth):
+                status = "🟡 O'tgan oy kirgan"
             else:
-                 status = "⚫️ Status: Yashirin"
+                status = "⚫️ Status yashirin"
             
+            # DC ID (Data Center ID)
+            dc_id = "Noma'lum"
+            if user.photo:
+                # Userning profil rasmidan DC ID ni olish
+                dc_id = getattr(user.photo, 'dc_id', 'Noma\'lum')
+
+            # Bio (About)
+            bio = full_user.about if full_user.about else "Bio bo'sh."
+
+            # Ism (Display Name)
+            full_name = get_display_name(user)
+
             # Katta matnni tuzish
             caption = f"👤 **AKKAUNT MA'LUMOTI**\n"
             caption += f"➖➖➖➖➖➖➖➖➖➖\n"
-            caption += f"**ID:** `{user.id}`\n"
-            caption += f"**Ism:** {user.first_name} {user.last_name or ''}\n"
-            caption += f"**Username:** @{user.username or 'Mavjud emas'}\n"
-            caption += f"**Turi:** {user_type}\n"
-            caption += f"**Status:** {status}\n"
-            caption += f"**DC ID:** `{getattr(user.photo, 'dc_id', 'Noma\'lum')}`\n"
-            caption += f"**Bio:**\n`{full_user.about or 'Bio bo\'sh.'}`\n"
+            caption += f"🆔 **ID:** `{user.id}`\n"
+            caption += f"👤 **Ism:** {full_name}\n"
+            caption += f"🔗 **Username:** @{user.username or 'Mavjud emas'}\n"
+            caption += f"🎭 **Turi:** {user_type}\n"
+            caption += f"📡 **Status:** {status}\n"
+            caption += f"🌐 **DC ID:** `{dc_id}`\n"
+            caption += f"📝 **Bio:**\n`{bio}`\n"
             
             await message.edit(caption)
             
         except Exception as e:
-            # Xato (masalan, akkaunt o'chirilgan bo'lishi mumkin)
+            # Xato (masalan, akkaunt o'chirilgan yoki maxfiylik sozlamalari)
             await message.edit(f"❌ Akkaunt ma'lumotlarini olishda xato yuz berdi: {e}")
