@@ -6,8 +6,7 @@ Funksiya: Akkaunt yoki user haqida keng qamrovli ma'lumot berish (.info)
 ================================================================================
 """
 import time
-import asyncio
-from telethon import types  # UserStatus turlarini olish uchun muhim
+from telethon import types
 from telethon.tl.functions.users import GetFullUserRequest
 from telethon.utils import get_display_name
 
@@ -22,7 +21,13 @@ class AccountInfoModule:
         Akkaunt haqida to'liq ma'lumot chiqarish.
         Ishlatish: .info yoki Reply qiling (boshqa user uchun)
         """
-        args = self.utils.get_args_list(message)
+        # Userbot ichidagi yordamchi funksiyalardan foydalanamiz
+        # Agar self.utils mavjud bo'lmasa, oddiy usulda olamiz
+        try:
+            args = self.utils.get_args_list(message)
+        except AttributeError:
+            args = message.text.split()[1:]
+
         reply = await message.get_reply_message()
         
         user_entity = None
@@ -70,9 +75,22 @@ class AccountInfoModule:
             elif isinstance(user.status, types.UserStatusOffline):
                 last_seen_ts = user.status.was_online.timestamp()
                 now_ts = time.time()
-                # Millisekund hisobi (self.utils funksiyasi uchun)
+                # Millisekund hisobi
                 diff_ms = (now_ts - last_seen_ts) * 1000
-                last_seen_str = self.utils.time_formatter(diff_ms)
+                
+                # Vaqt formatlash (agar self.utils bo'lmasa, o'zimiz hisoblaymiz)
+                if hasattr(self, 'utils') and hasattr(self.utils, 'time_formatter'):
+                    last_seen_str = self.utils.time_formatter(diff_ms)
+                else:
+                    seconds = int(diff_ms / 1000)
+                    minutes, seconds = divmod(seconds, 60)
+                    hours, minutes = divmod(minutes, 60)
+                    days, hours = divmod(hours, 24)
+                    if days > 0: last_seen_str = f"{days} kun"
+                    elif hours > 0: last_seen_str = f"{hours} soat"
+                    elif minutes > 0: last_seen_str = f"{minutes} daqiqa"
+                    else: last_seen_str = "bir oz"
+
                 status = f"🔴 Offline (Oxirgi: {last_seen_str} avval)"
             elif isinstance(user.status, types.UserStatusRecently):
                 status = "🟡 Yaqinda kirgan"
