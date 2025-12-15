@@ -84,7 +84,7 @@ class AccountInfoModule:
                 else:
                     seconds = int(diff_ms / 1000)
                     minutes, seconds = divmod(seconds, 60)
-                    hours, minutes = divmod(minutes, 60)
+                    hours, minutes = divmod(hours, 60)
                     days, hours = divmod(hours, 24)
                     if days > 0: last_seen_str = f"{days} kun"
                     elif hours > 0: last_seen_str = f"{hours} soat"
@@ -105,6 +105,7 @@ class AccountInfoModule:
             dc_id = "Noma'lum"
             if user.photo:
                 # Userning profil rasmidan DC ID ni olish
+                # Xatolikni oldini olish uchun try-except ishlatilishi mumkin, lekin getattr xavfsiz
                 dc_id = getattr(user.photo, 'dc_id', 'Noma\'lum')
 
             # Bio (About)
