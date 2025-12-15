@@ -1,98 +1,85 @@
 # -*- coding: utf-8 -*-
-from .. import loader, utils
-from telethon import types
+import time
+from telethon import types, events
 from telethon.tl.functions.users import GetFullUserRequest
 from telethon.utils import get_display_name
-import time
 
-@loader.tds
-class AccountInfoMod(loader.Module):
-    """Akkaunt haqida ma'lumot (.info)"""
-    
-    # Modul nomi aniq ko'rsatilgan
-    strings = {"name": "AccountInfo"}
-
-    async def client_ready(self, client, db):
+class Userbot:
+    """
+    Bu klass tizim tomonidan avtomatik o'qib olinadi.
+    """
+    def __init__(self, client):
         self.client = client
-        self.db = db
 
-    async def infocmd(self, message):
-        """<reply yoki username> - User haqida to'liq ma'lumot"""
-        
-        # Argumentlarni olish
-        args = utils.get_args_raw(message)
-        reply = await message.get_reply_message()
-        
-        user = None
-        
+    # Buyruq nomi funksiya nomidan olinadi (info -> .info)
+    async def info(self, message):
+        """
+        .info <reply/username> - Foydalanuvchi haqida to'liq ma'lumot
+        """
         try:
-            if reply:
-                user = await reply.get_sender()
-            elif args:
-                user = await self.client.get_entity(args)
-            else:
-                user = await message.get_sender()
-        except Exception:
-            await message.edit("<b>❌ Bunday foydalanuvchi topilmadi!</b>")
-            return
-
-        if not user:
-            await message.edit("<b>❌ Ma'lumot olishning iloji bo'lmadi.</b>")
-            return
-
-        await message.edit("<b>🔄 Ma'lumotlar yuklanmoqda...</b>")
-
-        try:
-            # To'liq ma'lumotni tortib olish
-            full_user = await self.client(GetFullUserRequest(user.id))
-            user_info = full_user.full_user
+            args = message.text.split(maxsplit=1)
+            reply = await message.get_reply_message()
             
-            # Asosiy user obyekti
-            u = full_user.users[0]
+            user_entity = None
+            
+            await message.edit("🔄 <b>Ma'lumot olinmoqda...</b>", parse_mode='html')
 
-            # Tahlil
-            user_type = "Bot 🤖" if u.bot else "Odam 👤"
-            if u.premium: user_type += " (Premium ✨)"
-            if u.scam: user_type += " (Scam ⚠️)"
+            # 1. Kimning ma'lumotini olishni aniqlash
+            if reply:
+                user_entity = await reply.get_sender()
+            elif len(args) > 1:
+                try:
+                    user_entity = await self.client.get_entity(args[1])
+                except:
+                    return await message.edit("❌ <b>Foydalanuvchi topilmadi.</b>", parse_mode='html')
+            else:
+                user_entity = await message.get_sender()
+                
+            if not user_entity:
+                return await message.edit("❌ <b>Ma'lumot olish imkoni bo'lmadi.</b>", parse_mode='html')
+
+            # 2. To'liq ma'lumotni API dan tortib olish
+            full_info = await self.client(GetFullUserRequest(user_entity.id))
+            user = full_info.users[0]
+            full_user = full_info.full_user
+            
+            # 3. Tahlil
+            user_type = "Bot 🤖" if user.bot else "User 🧑‍💻"
+            if user.premium: user_type += " (Premium ✨)"
+            if user.scam: user_type += " (Scam ⚠️)"
             
             # Status
-            status = "Noma'lum"
-            if isinstance(u.status, types.UserStatusOnline):
-                status = "🟢 Online"
-            elif isinstance(u.status, types.UserStatusOffline):
-                was_online = u.status.was_online.timestamp()
+            status = "Yashirin ⚫️"
+            if isinstance(user.status, types.UserStatusOnline):
+                status = "Online 🟢"
+            elif isinstance(user.status, types.UserStatusOffline):
+                was_online = user.status.was_online.timestamp()
                 diff = time.time() - was_online
-                
-                # Vaqtni hisoblash
-                minutes = int(diff / 60)
-                hours = int(minutes / 60)
-                days = int(hours / 24)
-                
-                if days > 0: vaqt = f"{days} kun"
-                elif hours > 0: vaqt = f"{hours} soat"
-                elif minutes > 0: vaqt = f"{minutes} daqiqa"
+                m = int(diff / 60)
+                h = int(m / 60)
+                d = int(h / 24)
+                if d > 0: vaqt = f"{d} kun"
+                elif h > 0: vaqt = f"{h} soat"
+                elif m > 0: vaqt = f"{m} daqiqa"
                 else: vaqt = "bir oz"
-                
-                status = f"🔴 Offline ({vaqt} oldin)"
+                status = f"Offline ({vaqt} oldin) 🔴"
             
-            # Bio
-            bio = user_info.about if user_info.about else "Mavjud emas"
+            # DC ID va Bio
+            dc_id = getattr(user.photo, 'dc_id', 'Noma\'lum') if user.photo else "Yo'q"
+            bio = full_user.about if full_user.about else "Mavjud emas"
             
-            # DC ID (Suratdan olish)
-            dc_id = u.photo.dc_id if u.photo else "Yo'q"
-
-            # Natija
+            # 4. Javob
             text = (
-                f"👤 <b>Foydalanuvchi:</b> {get_display_name(u)}\n"
-                f"🆔 <b>ID:</b> <code>{u.id}</code>\n"
-                f"🔗 <b>Username:</b> @{u.username if u.username else 'Yoq'}\n"
+                f"👤 <b>Foydalanuvchi:</b> {get_display_name(user)}\n"
+                f"🆔 <b>ID:</b> <code>{user.id}</code>\n"
+                f"🔗 <b>Username:</b> @{user.username if user.username else 'Yoq'}\n"
                 f"🎭 <b>Turi:</b> {user_type}\n"
                 f"📡 <b>Status:</b> {status}\n"
-                f"🌐 <b>DC:</b> {dc_id}\n\n"
+                f"🌐 <b>DC ID:</b> {dc_id}\n\n"
                 f"📝 <b>Bio:</b>\n<code>{bio}</code>"
             )
             
-            await message.edit(text)
+            await message.edit(text, parse_mode='html')
 
         except Exception as e:
-            await message.edit(f"<b>❌ Xatolik yuz berdi:</b> {str(e)}")
+            await message.edit(f"❌ <b>Xatolik:</b> {e}", parse_mode='html')
